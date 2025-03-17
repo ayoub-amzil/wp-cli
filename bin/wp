@@ -9,5 +9,4 @@ use WordpressCli\Command\InstallCommand;
 // Get command line arguments
 $args = array_slice($argv, 1);
 
-// Execute command with arguments
 (new InstallCommand())->execute($args);
