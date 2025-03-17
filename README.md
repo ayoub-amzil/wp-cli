@@ -21,7 +21,7 @@ A command-line tool to download and install any version of WordPress with custom
 **Install via Composer**
 
 ```bash
-composer global require your-vendor/wp-cli
+composer global require amzil-ayoub/wp-cli
 ```
 
 ## Usage
