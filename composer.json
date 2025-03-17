@@ -2,10 +2,10 @@
     "name": "amzil-ayoub/wp-cli",
     "description" : "A command-line tool to download and install any version of WordPress with custom folder naming. Perfect for developers who need to quickly set up WordPress instances.",
     "type": "library",
-    "version" : "1.2.0",
+    "version" : "1.2.1",
     "authors": [
     {
-      "name": "Ayoub Amzil",
+      "name": "Amzil Ayoub",
       "email": "dev.amzil.ayoub@gmail.com"
     }
   ],
