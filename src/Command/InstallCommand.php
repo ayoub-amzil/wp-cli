@@ -43,22 +43,18 @@ class InstallCommand
         $timestamp = date('YmdHis');
         $targetDir = getcwd() . "/wordpress_{$version}_{$timestamp}";
         
-        $this->downloadWordPress($version, $targetDir);
-        $this->cleanup();
-        
-        echo "\n✅ Success! WordPress {$version} installed at:\n{$targetDir}\n";
-    }
-
-    private function downloadWordPress(string $version, string $targetDir): void
-    {
         $tempZip = $this->createTempFile();
         $downloadUrl = "https://wordpress.org/wordpress-{$version}.zip";
 
         echo "⬇️  Downloading WordPress {$version}...\n";
         $this->downloadFile($downloadUrl, $tempZip);
-        
+
         echo "📦 Extracting files...\n";
         $this->extractZip($tempZip, $targetDir);
+
+        $this->cleanupTempFile($tempZip);
+
+        echo "\n✅ Success! WordPress {$version} installed at:\n{$targetDir}\n";
     }
 
     private function createTempFile(): string
@@ -88,17 +84,55 @@ class InstallCommand
         if ($zip->open($zipPath) !== true) {
             throw new \RuntimeException('Failed to open ZIP archive');
         }
-        
-        if (!$zip->extractTo($targetDir)) {
-            throw new \RuntimeException('Failed to extract ZIP file');
+
+        // Create target directory if it doesn't exist
+        if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true)) {
+            throw new \RuntimeException("Failed to create target directory: {$targetDir}");
         }
-        
+
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $filename = $zip->getNameIndex($i);
+            
+            // Remove "wordpress/" from path
+            $newPath = str_replace('wordpress/', '', $filename);
+            
+            // Skip the root directory entry
+            if ($newPath === '') continue;
+
+            $fullPath = $targetDir . '/' . $newPath;
+
+            // Handle directory entries
+            if (substr($filename, -1) === '/') {
+                if (!is_dir($fullPath)) {
+                    if (!mkdir($fullPath, 0755, true)) {
+                        throw new \RuntimeException("Failed to create directory: {$fullPath}");
+                    }
+                }
+            } else {
+                // Ensure parent directory exists
+                $parentDir = dirname($fullPath);
+                if (!is_dir($parentDir)) {
+                    if (!mkdir($parentDir, 0755, true)) {
+                        throw new \RuntimeException("Failed to create parent directory: {$parentDir}");
+                    }
+                }
+
+                // Extract file
+                $contents = $zip->getFromIndex($i);
+                if (file_put_contents($fullPath, $contents) === false) {
+                    throw new \RuntimeException("Failed to write file: {$fullPath}");
+                }
+            }
+        }
+
         $zip->close();
     }
 
-    private function cleanup(): void
+    private function cleanupTempFile(string $tempFile): void
     {
-        // Add any temporary file cleanup here if needed
+        if (file_exists($tempFile)) {
+            unlink($tempFile);
+        }
     }
 
     private function showError(string $message): void
