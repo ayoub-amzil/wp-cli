@@ -6,4 +6,8 @@ WordpressCli\Autoloader::register();
 
 use WordpressCli\Command\InstallCommand;
 
-(new InstallCommand())->execute();
+// Get command line arguments
+$args = array_slice($argv, 1);
+
+// Execute command with arguments
+(new InstallCommand())->execute($args);
