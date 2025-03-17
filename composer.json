@@ -1,0 +1,13 @@
+{
+    "name": "amzil-ayoub/wp-cli",
+    "type": "library",
+    "bin": ["bin/wp"],
+    "require": {
+        "php": "^8.0",
+        "ext-zip": "*",
+        "ext-json": "*"
+    },
+    "autoload": {
+        "files": ["src/Autoloader.php"]
+    }
+}
