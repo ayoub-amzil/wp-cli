@@ -6,12 +6,16 @@ class InstallCommand
 {
     private const WORDPRESS_API = 'https://api.wordpress.org/core/version-check/1.7/';
     
-    public function execute(): void
+    public function execute(array $args): void
     {
         try {
             $this->showHeader();
+            
+            // Get custom folder name from arguments
+            $folderName = $args[0] ?? null;
             $version = $this->getLatestVersion();
-            $this->installWordPress($version);
+            
+            $this->installWordPress($version, $folderName);
         } catch (\Exception $e) {
             $this->showError($e->getMessage());
             exit(1);
@@ -38,10 +42,13 @@ class InstallCommand
         return $data['offers'][0]['version'];
     }
 
-    private function installWordPress(string $version): void
+    private function installWordPress(string $version, ?string $customName = null): void
     {
         $timestamp = date('YmdHis');
-        $targetDir = getcwd() . "/wordpress_{$version}_{$timestamp}";
+        
+        // Use custom name if provided, otherwise use default
+        $folderName = $customName ?? "wordpress_{$version}_{$timestamp}";
+        $targetDir = getcwd() . DIRECTORY_SEPARATOR . $folderName;
         
         $tempZip = $this->createTempFile();
         $downloadUrl = "https://wordpress.org/wordpress-{$version}.zip";
@@ -49,7 +56,7 @@ class InstallCommand
         echo "⬇️  Downloading WordPress {$version}...\n";
         $this->downloadFile($downloadUrl, $tempZip);
 
-        echo "📦 Extracting files...\n";
+        echo "📦 Extracting files to: {$folderName}\n";
         $this->extractZip($tempZip, $targetDir);
 
         $this->cleanupTempFile($tempZip);
