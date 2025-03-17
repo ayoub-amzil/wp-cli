@@ -13,13 +13,53 @@ class InstallCommand
             
             // Get custom folder name from arguments
             $folderName = $args[0] ?? null;
-            $version = $this->getLatestVersion();
             
+            // Validate folder name if provided
+            if ($folderName && !$this->validateFolderName($folderName)) {
+                throw new \InvalidArgumentException(
+                    "Invalid folder name. Only alphanumeric, hyphens, and underscores are allowed."
+                );
+            }
+
+            $version = $this->getLatestVersion();
             $this->installWordPress($version, $folderName);
         } catch (\Exception $e) {
             $this->showError($e->getMessage());
             exit(1);
         }
+    }
+
+    private function validateFolderName(string $name): bool
+    {
+        // Allow alphanumeric, hyphens, and underscores
+        return (bool) preg_match('/^[a-zA-Z0-9_-]+$/', $name);
+    }
+
+    private function installWordPress(string $version, ?string $customName = null): void
+    {
+        $timestamp = date('YmdHis');
+        
+        // Use custom name if provided and valid, otherwise use default
+        $folderName = $customName ?? "wordpress_{$version}_{$timestamp}";
+        $targetDir = getcwd() . DIRECTORY_SEPARATOR . $folderName;
+        
+        // Check if directory already exists
+        if (is_dir($targetDir)) {
+            throw new \RuntimeException("Directory already exists: {$folderName}");
+        }
+
+        $tempZip = $this->createTempFile();
+        $downloadUrl = "https://wordpress.org/wordpress-{$version}.zip";
+
+        echo "⬇️  Downloading WordPress {$version}...\n";
+        $this->downloadFile($downloadUrl, $tempZip);
+
+        echo "📦 Extracting files to: {$folderName}\n";
+        $this->extractZip($tempZip, $targetDir);
+
+        $this->cleanupTempFile($tempZip);
+
+        echo "\n✅ Success! WordPress {$version} installed at:\n{$targetDir}\n";
     }
 
     private function showHeader(): void
@@ -40,28 +80,6 @@ class InstallCommand
 
         $data = json_decode($response, true);
         return $data['offers'][0]['version'];
-    }
-
-    private function installWordPress(string $version, ?string $customName = null): void
-    {
-        $timestamp = date('YmdHis');
-        
-        // Use custom name if provided, otherwise use default
-        $folderName = $customName ?? "wordpress_{$version}_{$timestamp}";
-        $targetDir = getcwd() . DIRECTORY_SEPARATOR . $folderName;
-        
-        $tempZip = $this->createTempFile();
-        $downloadUrl = "https://wordpress.org/wordpress-{$version}.zip";
-
-        echo "⬇️  Downloading WordPress {$version}...\n";
-        $this->downloadFile($downloadUrl, $tempZip);
-
-        echo "📦 Extracting files to: {$folderName}\n";
-        $this->extractZip($tempZip, $targetDir);
-
-        $this->cleanupTempFile($tempZip);
-
-        echo "\n✅ Success! WordPress {$version} installed at:\n{$targetDir}\n";
     }
 
     private function createTempFile(): string
@@ -92,9 +110,9 @@ class InstallCommand
             throw new \RuntimeException('Failed to open ZIP archive');
         }
 
-        // Create target directory if it doesn't exist
-        if (!is_dir($targetDir) && !mkdir($targetDir, 0755, true)) {
-            throw new \RuntimeException("Failed to create target directory: {$targetDir}");
+        // Create target directory
+        if (!mkdir($targetDir, 0755, true)) {
+            throw new \RuntimeException("Failed to create directory: {$targetDir}");
         }
 
         for ($i = 0; $i < $zip->numFiles; $i++) {
@@ -106,7 +124,7 @@ class InstallCommand
             // Skip the root directory entry
             if ($newPath === '') continue;
 
-            $fullPath = $targetDir . '/' . $newPath;
+            $fullPath = $targetDir . DIRECTORY_SEPARATOR . $newPath;
 
             // Handle directory entries
             if (substr($filename, -1) === '/') {
