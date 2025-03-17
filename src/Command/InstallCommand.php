@@ -5,14 +5,16 @@ namespace WordpressCli\Command;
 class InstallCommand
 {
     private const WORDPRESS_API = 'https://api.wordpress.org/core/version-check/1.7/';
+    private const BASE_DOWNLOAD_URL = 'https://wordpress.org/wordpress-%s.zip';
     
     public function execute(array $args): void
     {
         try {
             $this->showHeader();
             
-            // Get custom folder name from arguments
-            $folderName = $args[0] ?? null;
+            $parsedArgs = $this->parseArguments($args);
+            $folderName = $parsedArgs['folder'] ?? null;
+            $version = $parsedArgs['version'] ?? $this->getLatestVersion();
             
             // Validate folder name if provided
             if ($folderName && !$this->validateFolderName($folderName)) {
@@ -21,57 +23,79 @@ class InstallCommand
                 );
             }
 
-            $version = $this->getLatestVersion();
-            $this->installWordPress($version, $folderName);
+            // Validate version format
+            if (!$this->validateVersion($version)) {
+                throw new \InvalidArgumentException("Invalid version format. Use major, major.minor, or major.minor.path");
+            }
+
+            // Construct the correct download URL based on version format
+            $downloadVersion = $this->getDownloadVersion($version);
+            
+            // Check if version exists
+            if (!$this->versionExists($downloadVersion)) {
+                throw new \RuntimeException("WordPress version {$downloadVersion} does not exist.");
+            }
+
+            $this->installWordPress($downloadVersion, $folderName);
         } catch (\Exception $e) {
             $this->showError($e->getMessage());
             exit(1);
         }
     }
 
+    private function parseArguments(array $args): array
+    {
+        $result = ['folder' => null, 'version' => null];
+        
+        foreach ($args as $arg) {
+            if (str_starts_with($arg, 'v=')) {
+                $result['version'] = substr($arg, 2);
+            } else {
+                $result['folder'] = $arg;
+            }
+        }
+        
+        return $result;
+    }
+
     private function validateFolderName(string $name): bool
     {
-        // Allow alphanumeric, hyphens, and underscores
         return (bool) preg_match('/^[a-zA-Z0-9_-]+$/', $name);
     }
 
-    private function installWordPress(string $version, ?string $customName = null): void
+    private function validateVersion(string $version): bool
     {
-        $timestamp = date('YmdHis');
-        
-        // Use custom name if provided and valid, otherwise use default
-        $folderName = $customName ?? "wordpress_{$version}_{$timestamp}";
-        $targetDir = getcwd() . DIRECTORY_SEPARATOR . $folderName;
-        
-        // Check if directory already exists
-        if (is_dir($targetDir)) {
-            throw new \RuntimeException("Directory already exists: {$folderName}");
-        }
-
-        $tempZip = $this->createTempFile();
-        $downloadUrl = "https://wordpress.org/wordpress-{$version}.zip";
-
-        echo "⬇️  Downloading WordPress {$version}...\n";
-        $this->downloadFile($downloadUrl, $tempZip);
-
-        echo "📦 Extracting files to: {$folderName}\n";
-        $this->extractZip($tempZip, $targetDir);
-
-        $this->cleanupTempFile($tempZip);
-
-        echo "\n✅ Success! WordPress {$version} installed at:\n{$targetDir}\n";
+        return (bool) preg_match('/^\d+(\.\d+){0,2}$/', $version);
     }
 
-    private function showHeader(): void
+    private function getDownloadVersion(string $version): string
     {
-        echo "================================\n";
-        echo " WordPress Installation Tool\n";
-        echo "================================\n\n";
+        $parts = explode('.', $version);
+        
+        // Major only (e.g., v=6 → 6.0)
+        if (count($parts) === 1) {
+            return "{$parts[0]}.0";
+        }
+        
+        // Major and minor (e.g., v=6.2 → 6.2)
+        if (count($parts) === 2) {
+            return "{$parts[0]}.{$parts[1]}";
+        }
+        
+        // Full version (e.g., v=6.2.1 → 6.2.1)
+        return $version;
+    }
+
+    private function versionExists(string $version): bool
+    {
+        $url = sprintf(self::BASE_DOWNLOAD_URL, $version);
+        $headers = @get_headers($url);
+        return $headers && str_contains($headers[0], '200');
     }
 
     private function getLatestVersion(): string
     {
-        echo "🔍 Fetching latest WordPress version...\n";
+        echo "Fetching latest WordPress version...\n";
         $response = file_get_contents(self::WORDPRESS_API);
         
         if (!$response) {
@@ -80,6 +104,32 @@ class InstallCommand
 
         $data = json_decode($response, true);
         return $data['offers'][0]['version'];
+    }
+
+    private function installWordPress(string $version, ?string $customName = null): void
+    {
+        $t = time();
+        // Use custom name if provided and valid, otherwise use version-based name
+        $folderName = $customName ?? "wordpress_{$version}_{$t}";
+        $targetDir = getcwd() . DIRECTORY_SEPARATOR . $folderName;
+        
+        // Check if directory already exists
+        if (is_dir($targetDir)) {
+            throw new \RuntimeException("Directory already exists: {$folderName}");
+        }
+
+        $tempZip = $this->createTempFile();
+        $downloadUrl = sprintf(self::BASE_DOWNLOAD_URL, $version);
+
+        echo "⬇️  Downloading WordPress {$version}...\n";
+        $this->downloadFile($downloadUrl, $tempZip);
+
+        echo "Extracting files to: {$folderName}\n";
+        $this->extractZip($tempZip, $targetDir);
+
+        $this->cleanupTempFile($tempZip);
+
+        echo "\n✅ Success! WordPress {$version} installed at:\n{$targetDir}\n";
     }
 
     private function createTempFile(): string
@@ -158,6 +208,13 @@ class InstallCommand
         if (file_exists($tempFile)) {
             unlink($tempFile);
         }
+    }
+
+    private function showHeader(): void
+    {
+        echo "================================\n";
+        echo " WordPress Installation Tool\n";
+        echo "================================\n\n";
     }
 
     private function showError(string $message): void
